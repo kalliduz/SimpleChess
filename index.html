@@ -16,9 +16,6 @@
   <main>
     <section class="board-panel">
       <div class="controls">
-        <label>Thinking time (ms):
-          <input type="number" id="think-time" min="100" step="100" value="1500" />
-        </label>
         <button id="new-game">New Game</button>
       </div>
       <div id="board" aria-label="Chess board" role="grid"></div>
@@ -27,7 +24,7 @@
 
     <section class="analysis-panel">
       <h2>Best move preview</h2>
-      <p>The AI uses iterative deepening within the allotted time. The preview shows the principal variation from the latest search.</p>
+        <p>The AI uses iterative deepening to a fixed depth. The preview shows the principal variation from the latest search.</p>
       <div class="analysis-controls">
         <label class="checkbox">
           <input type="checkbox" id="perma-analysis" />
