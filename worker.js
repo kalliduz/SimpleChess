@@ -14,14 +14,14 @@ function minimax(depth, alpha, beta, maximizing, deadline) {
   if (cancelled) return { score: maximizing ? -Infinity : Infinity, timeout: true };
   if (performance.now() > deadline) return { score: maximizing ? -Infinity : Infinity, timeout: true };
 
-  if (game.inCheckmate()) {
+  if (game.isCheckmate()) {
     return { score: maximizing ? -Infinity : Infinity };
   }
   if (
-    game.inStalemate() ||
-    game.inDraw() ||
-    game.insufficientMaterial() ||
-    game.inThreefoldRepetition()
+    game.isStalemate() ||
+    game.isDraw() ||
+    game.isInsufficientMaterial() ||
+    game.isThreefoldRepetition()
   ) {
     return { score: 0 };
   }
