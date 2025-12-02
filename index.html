@@ -10,19 +10,13 @@
 <body>
   <header>
     <h1>Simple Chess</h1>
-    <p>Play against a built-in minimax AI with alpha-beta pruning and configurable thinking time.</p>
+    <p>Use the built-in search to explore the best line and optionally let it play the current side.</p>
   </header>
 
   <main>
     <section class="board-panel">
       <div class="controls">
-        <label>Human plays:
-          <select id="player-color">
-            <option value="w">White</option>
-            <option value="b">Black</option>
-          </select>
-        </label>
-        <label>AI thinking time (ms):
+        <label>Thinking time (ms):
           <input type="number" id="think-time" min="100" step="100" value="1500" />
         </label>
         <button id="new-game">New Game</button>

@@ -2,7 +2,6 @@ const boardEl = document.getElementById("board");
 const statusEl = document.getElementById("status");
 const previewEl = document.getElementById("preview");
 const thinkInput = document.getElementById("think-time");
-const colorSelect = document.getElementById("player-color");
 const newGameBtn = document.getElementById("new-game");
 const permaAnalysisToggle = document.getElementById("perma-analysis");
 const moveNowBtn = document.getElementById("move-now");
@@ -100,7 +99,6 @@ function renderBoard() {
 }
 
 function onSquareClick(r, c) {
-  if (game.turn() !== colorSelect.value) return;
   if (searching) stopSearch();
   const square = squareFromCoords(r, c);
   if (selected === square) {
@@ -130,9 +128,11 @@ function applyMove(move) {
   selected = null;
   legalMoves = [];
   renderBoard();
-  previewEl.textContent = "Calculating best reply...";
+  previewEl.textContent = permaAnalysisToggle.checked
+    ? "Analyzing..."
+    : "Run the search to see its preferred line.";
   stopSearch();
-  requestAnimationFrame(() => maybeAutoPlay());
+  requestAnimationFrame(() => maybeAnalyze());
 }
 
 function highlightMoves() {
@@ -246,7 +246,7 @@ function finalizeSearch() {
   pendingAutoMove = false;
   const shouldContinueAnalysis = permaAnalysisToggle.checked && !getResult();
   if (shouldContinueAnalysis && !searching) {
-    requestAnimationFrame(() => maybeAutoPlay());
+    requestAnimationFrame(() => think({ autoMove: false }));
   }
 }
 
@@ -273,31 +273,13 @@ function think({ autoMove = false } = {}) {
   });
 }
 
-function maybeAutoPlay() {
-  const result = getResult();
-  if (result) {
-    statusEl.textContent = result === "1/2-1/2" ? "Draw" : `${result === "1-0" ? "White" : "Black"} wins`;
-    stopSearch();
-    return;
-  }
-  if (permaAnalysisToggle.checked) {
-    if (!searching) requestAnimationFrame(() => think({ autoMove: false }));
-    return;
-  }
-  if (game.turn() !== colorSelect.value) {
-    if (!searching) requestAnimationFrame(() => think({ autoMove: true }));
-  } else {
-    stopSearch();
-  }
-}
-
 function applyEngineMove(move) {
   game.move({ from: move.from, to: move.to, promotion: move.promotion || "q" });
   selected = null;
   legalMoves = [];
   renderBoard();
   pendingAutoMove = false;
-  requestAnimationFrame(() => maybeAutoPlay());
+  requestAnimationFrame(() => maybeAnalyze());
 }
 
 newGameBtn.addEventListener("click", () => {
@@ -309,27 +291,17 @@ newGameBtn.addEventListener("click", () => {
   lastBestMove = null;
   lastBestLines = [];
   renderBoard();
-  maybeAutoPlay();
-});
-
-colorSelect.addEventListener("change", () => {
-  stopSearch();
-  game.reset();
-  lastBestMove = null;
-  lastBestLines = [];
-  renderBoard();
-  maybeAutoPlay();
+  maybeAnalyze();
 });
 
 permaAnalysisToggle.addEventListener("change", () => {
   if (!permaAnalysisToggle.checked) {
     stopSearch();
   }
-  maybeAutoPlay();
+  maybeAnalyze();
 });
 
 moveNowBtn.addEventListener("click", () => {
-  if (game.turn() === colorSelect.value) return;
   if (lastBestMove) {
     if (searching) stopSearch();
     applyEngineMove(lastBestMove);
@@ -345,4 +317,16 @@ moveNowBtn.addEventListener("click", () => {
 
 createBoard();
 renderBoard();
-maybeAutoPlay();
+maybeAnalyze();
+
+function maybeAnalyze() {
+  const result = getResult();
+  if (result) {
+    statusEl.textContent = result === "1/2-1/2" ? "Draw" : `${result === "1-0" ? "White" : "Black"} wins`;
+    stopSearch();
+    return;
+  }
+  if (permaAnalysisToggle.checked && !searching) {
+    requestAnimationFrame(() => think({ autoMove: false }));
+  }
+}
