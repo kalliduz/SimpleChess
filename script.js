@@ -1,7 +1,6 @@
 const boardEl = document.getElementById("board");
 const statusEl = document.getElementById("status");
 const previewEl = document.getElementById("preview");
-const thinkInput = document.getElementById("think-time");
 const newGameBtn = document.getElementById("new-game");
 const permaAnalysisToggle = document.getElementById("perma-analysis");
 const moveNowBtn = document.getElementById("move-now");
@@ -24,6 +23,7 @@ let lastDepth = 0;
 let pendingAutoMove = false;
 let activeSearchToken = null;
 let searchTokenCounter = 0;
+const MAX_SEARCH_DEPTH = 5;
 
 const engineWorker = new Worker("worker.js");
 
@@ -128,10 +128,8 @@ function applyMove(move) {
   selected = null;
   legalMoves = [];
   renderBoard();
-  previewEl.textContent = permaAnalysisToggle.checked
-    ? "Analyzing..."
-    : "Run the search to see its preferred line.";
   stopSearch();
+  resetAnalysisState();
   requestAnimationFrame(() => maybeAnalyze());
 }
 
@@ -163,6 +161,16 @@ function stopSearch() {
   activeSearchToken = null;
   pendingAutoMove = false;
   analysisStatusEl.textContent = "Idle";
+}
+
+function resetAnalysisState() {
+  lastBestMove = null;
+  lastBestLines = [];
+  lastDepth = 0;
+  analysisStatusEl.textContent = permaAnalysisToggle.checked ? "Analyzing..." : "Idle";
+  previewEl.textContent = permaAnalysisToggle.checked
+    ? "Analyzing..."
+    : "Run the search to see its preferred line.";
 }
 
 function formatPV(line) {
@@ -260,7 +268,6 @@ function think({ autoMove = false } = {}) {
   lastBestLines = [];
   lastDepth = 0;
 
-  const timeMs = Math.max(100, Number(thinkInput.value) || 1500);
   analysisStatusEl.textContent = autoMove ? "Finding move..." : "Analyzing...";
   previewEl.textContent = "Searching...";
 
@@ -268,7 +275,7 @@ function think({ autoMove = false } = {}) {
     type: "search",
     token,
     fen: game.fen(),
-    timeMs,
+    maxDepth: MAX_SEARCH_DEPTH,
     color: game.turn(),
   });
 }
@@ -279,6 +286,7 @@ function applyEngineMove(move) {
   legalMoves = [];
   renderBoard();
   pendingAutoMove = false;
+  resetAnalysisState();
   requestAnimationFrame(() => maybeAnalyze());
 }
 
@@ -287,9 +295,7 @@ newGameBtn.addEventListener("click", () => {
   game.reset();
   selected = null;
   legalMoves = [];
-  previewEl.textContent = "Run the AI to see its preferred line.";
-  lastBestMove = null;
-  lastBestLines = [];
+  resetAnalysisState();
   renderBoard();
   maybeAnalyze();
 });

@@ -10,9 +10,8 @@ let activeToken = null;
 let cancelled = false;
 let game = null;
 
-function minimax(depth, alpha, beta, maximizing, deadline) {
+function minimax(depth, alpha, beta, maximizing) {
   if (cancelled) return { score: maximizing ? -Infinity : Infinity, timeout: true };
-  if (performance.now() > deadline) return { score: maximizing ? -Infinity : Infinity, timeout: true };
 
   if (game.isCheckmate()) {
     return { score: maximizing ? -Infinity : Infinity };
@@ -39,7 +38,7 @@ function minimax(depth, alpha, beta, maximizing, deadline) {
     for (const move of moves) {
       if (cancelled) return { score: best, line: bestLine, timeout: true };
       game.move({ from: move.from, to: move.to, promotion: move.promotion || "q" });
-      const { score, timeout, line } = minimax(depth - 1, alpha, beta, false, deadline);
+      const { score, timeout, line } = minimax(depth - 1, alpha, beta, false);
       game.undo();
       if (timeout) timedOut = true;
       if (score > best) {
@@ -48,10 +47,6 @@ function minimax(depth, alpha, beta, maximizing, deadline) {
       }
       alpha = Math.max(alpha, best);
       if (beta <= alpha) break;
-      if (performance.now() > deadline) {
-        timedOut = true;
-        break;
-      }
     }
     return { score: best, line: bestLine, timeout: timedOut };
   } else {
@@ -60,7 +55,7 @@ function minimax(depth, alpha, beta, maximizing, deadline) {
     for (const move of moves) {
       if (cancelled) return { score: best, line: bestLine, timeout: true };
       game.move({ from: move.from, to: move.to, promotion: move.promotion || "q" });
-      const { score, timeout, line } = minimax(depth - 1, alpha, beta, true, deadline);
+      const { score, timeout, line } = minimax(depth - 1, alpha, beta, true);
       game.undo();
       if (timeout) timedOut = true;
       if (score < best) {
@@ -69,16 +64,12 @@ function minimax(depth, alpha, beta, maximizing, deadline) {
       }
       beta = Math.min(beta, best);
       if (beta <= alpha) break;
-      if (performance.now() > deadline) {
-        timedOut = true;
-        break;
-      }
     }
     return { score: best, line: bestLine, timeout: timedOut };
   }
 }
 
-function rootSearch(depth, maximizing, deadline) {
+function rootSearch(depth, maximizing) {
   const moves = game.moves({ verbose: true });
   let alpha = -Infinity;
   let beta = Infinity;
@@ -86,7 +77,7 @@ function rootSearch(depth, maximizing, deadline) {
   for (const move of moves) {
     if (cancelled) return { moves: results, timeout: true };
     game.move({ from: move.from, to: move.to, promotion: move.promotion || "q" });
-    const { score, timeout, line } = minimax(depth - 1, alpha, beta, !maximizing, deadline);
+    const { score, timeout, line } = minimax(depth - 1, alpha, beta, !maximizing);
     game.undo();
     if (timeout) return { moves: results, timeout: true };
     const totalLine = [move, ...(line || [])];
@@ -103,7 +94,7 @@ function rootSearch(depth, maximizing, deadline) {
 }
 
 self.onmessage = (event) => {
-  const { type, token, fen, timeMs, color } = event.data;
+  const { type, token, fen, maxDepth, color } = event.data;
   if (type === "cancel") {
     if (token === activeToken) cancelled = true;
     return;
@@ -114,11 +105,10 @@ self.onmessage = (event) => {
     cancelled = false;
     game = new ChessEngine(fen);
     const maximizing = color === "w";
-    const deadline = performance.now() + timeMs;
     let depth = 1;
     let best = [];
-    while (!cancelled && performance.now() < deadline) {
-      const { moves, timeout } = rootSearch(depth, maximizing, deadline);
+    while (!cancelled && depth <= maxDepth) {
+      const { moves, timeout } = rootSearch(depth, maximizing);
       if (cancelled) break;
       if (!timeout && moves.length) {
         best = moves;
