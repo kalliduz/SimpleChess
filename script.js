@@ -40,12 +40,11 @@ engineWorker.onmessage = ({ data }) => {
 };
 
 function handleSearchUpdate(lines, depth) {
-  if (!lines || !lines.length) return;
-  lastBestLines = lines;
-  lastBestMove = lines[0]?.line?.[0] || null;
+  lastBestLines = lines || [];
+  lastBestMove = lastBestLines[0]?.line?.[0] || null;
   lastDepth = depth;
-  updatePreview(lines, depth);
-  analysisStatusEl.textContent = `Depth ${depth}`;
+  updatePreview(lastBestLines, depth);
+  analysisStatusEl.textContent = lastBestLines.length ? `Depth ${depth}` : "No principal variation available yet.";
 }
 
 function createBoard() {
@@ -241,14 +240,14 @@ function finalizeSearch() {
       }
     }
     if (lastBestMove) {
-      game.move({ from: lastBestMove.from, to: lastBestMove.to, promotion: lastBestMove.promotion || "q" });
-      selected = null;
-      legalMoves = [];
-      renderBoard();
-      requestAnimationFrame(() => maybeAutoPlay());
+      applyEngineMove(lastBestMove);
     }
   }
   pendingAutoMove = false;
+  const shouldContinueAnalysis = permaAnalysisToggle.checked && !getResult();
+  if (shouldContinueAnalysis && !searching) {
+    requestAnimationFrame(() => maybeAutoPlay());
+  }
 }
 
 function think({ autoMove = false } = {}) {
@@ -292,6 +291,15 @@ function maybeAutoPlay() {
   }
 }
 
+function applyEngineMove(move) {
+  game.move({ from: move.from, to: move.to, promotion: move.promotion || "q" });
+  selected = null;
+  legalMoves = [];
+  renderBoard();
+  pendingAutoMove = false;
+  requestAnimationFrame(() => maybeAutoPlay());
+}
+
 newGameBtn.addEventListener("click", () => {
   stopSearch();
   game.reset();
@@ -322,18 +330,17 @@ permaAnalysisToggle.addEventListener("change", () => {
 
 moveNowBtn.addEventListener("click", () => {
   if (game.turn() === colorSelect.value) return;
-  if (searching) {
-    stopSearch();
-  }
   if (lastBestMove) {
-    game.move({ from: lastBestMove.from, to: lastBestMove.to, promotion: lastBestMove.promotion || "q" });
-    selected = null;
-    legalMoves = [];
-    renderBoard();
-    requestAnimationFrame(() => maybeAutoPlay());
-  } else {
-    think({ autoMove: true });
+    if (searching) stopSearch();
+    applyEngineMove(lastBestMove);
+    return;
   }
+  if (searching) {
+    pendingAutoMove = true;
+    analysisStatusEl.textContent = "Finishing search...";
+    return;
+  }
+  think({ autoMove: true });
 });
 
 createBoard();
