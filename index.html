@@ -33,6 +33,16 @@
     <section class="analysis-panel">
       <h2>Best move preview</h2>
       <p>The AI uses iterative deepening within the allotted time. The preview shows the principal variation from the latest search.</p>
+      <div class="analysis-controls">
+        <label class="checkbox">
+          <input type="checkbox" id="perma-analysis" />
+          Permanent analysis
+        </label>
+        <div class="analysis-actions">
+          <button id="move-now" type="button">Move Now</button>
+          <div id="analysis-status" class="analysis-status">Idle</div>
+        </div>
+      </div>
       <div class="preview" id="preview">Run the AI to see its preferred line.</div>
     </section>
   </main>
