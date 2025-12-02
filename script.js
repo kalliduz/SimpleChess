@@ -8,9 +8,14 @@ const permaAnalysisToggle = document.getElementById("perma-analysis");
 const moveNowBtn = document.getElementById("move-now");
 const analysisStatusEl = document.getElementById("analysis-status");
 
+const ChessEngine = typeof window.Chess === "function" ? window.Chess : window.Chess?.Chess;
+if (!ChessEngine) {
+  throw new Error("Chess library failed to load.");
+}
+
 const fileLabels = ["a", "b", "c", "d", "e", "f", "g", "h"];
 
-let game = new Chess();
+let game = new ChessEngine();
 let selected = null;
 let legalMoves = [];
 let searching = false;
@@ -178,10 +183,47 @@ function updatePreview(lines, depth) {
     return;
   }
   const header = depth ? `Depth ${depth} best lines:` : "Principal variations:";
-  const body = lines
-    .map((entry, idx) => `${idx + 1}. (${describeScore(entry.displayScore)}) ${formatPV(entry.line)}`)
-    .join("\n");
-  previewEl.textContent = `${header}\n${body}`;
+  previewEl.innerHTML = "";
+
+  const headerRow = document.createElement("div");
+  headerRow.className = "pv-header";
+  const depthBadge = document.createElement("span");
+  depthBadge.className = "pv-badge";
+  depthBadge.textContent = depth ? `Depth ${depth}` : "Current lines";
+  const summary = document.createElement("span");
+  summary.className = "pv-summary";
+  summary.textContent = `${lines.length} variation${lines.length === 1 ? "" : "s"}`;
+  headerRow.append(depthBadge, summary);
+  previewEl.appendChild(headerRow);
+
+  const list = document.createElement("ol");
+  list.className = "pv-list";
+
+  lines.forEach((entry, idx) => {
+    const item = document.createElement("li");
+    item.className = "pv-line";
+    const header = document.createElement("div");
+    header.className = "pv-line-header";
+
+    const score = document.createElement("span");
+    score.className = "pv-score";
+    score.textContent = describeScore(entry.displayScore);
+
+    const label = document.createElement("span");
+    label.className = "pv-label";
+    label.textContent = `Line ${idx + 1}`;
+
+    header.append(label, score);
+
+    const moves = document.createElement("div");
+    moves.className = "pv-moves";
+    moves.textContent = formatPV(entry.line);
+
+    item.append(header, moves);
+    list.appendChild(item);
+  });
+
+  previewEl.appendChild(list);
 }
 
 function finalizeSearch() {

@@ -146,6 +146,74 @@ label {
   line-height: 1.5;
 }
 
+.pv-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.pv-badge {
+  background: #e8eef7;
+  color: #1f3c73;
+  padding: 0.25rem 0.6rem;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+
+.pv-summary {
+  color: #4a5568;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.pv-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.pv-line {
+  background: #fff;
+  border: 1px solid #d9e0e8;
+  border-radius: 6px;
+  padding: 0.6rem 0.65rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+}
+
+.pv-line-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.35rem;
+  font-weight: 700;
+  color: #1a1a1a;
+}
+
+.pv-label {
+  letter-spacing: 0.02em;
+}
+
+.pv-score {
+  background: #edf2f7;
+  color: #2f3e56;
+  padding: 0.25rem 0.45rem;
+  border-radius: 4px;
+  font-variant-numeric: tabular-nums;
+}
+
+.pv-moves {
+  color: #2d3748;
+  font-size: 0.95rem;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
 button {
   background: var(--accent);
   color: white;

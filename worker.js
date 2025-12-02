@@ -1,6 +1,11 @@
 importScripts("chess.js");
 importScripts("engine.js");
 
+const ChessEngine = typeof self.Chess === "function" ? self.Chess : self.Chess?.Chess;
+if (!ChessEngine) {
+  throw new Error("Chess library failed to load inside the worker.");
+}
+
 let activeToken = null;
 let cancelled = false;
 let game = null;
@@ -107,7 +112,7 @@ self.onmessage = (event) => {
   if (type === "search") {
     activeToken = token;
     cancelled = false;
-    game = new Chess(fen);
+    game = new ChessEngine(fen);
     const maximizing = color === "w";
     const deadline = performance.now() + timeMs;
     let depth = 1;
