@@ -119,14 +119,6 @@ label {
   flex-wrap: wrap;
 }
 
-.depth-control input[type="number"] {
-  width: 4.5rem;
-  padding: 0.35rem 0.4rem;
-  border: 1px solid #c7d2e2;
-  border-radius: 4px;
-  font-weight: 600;
-}
-
 .analysis-actions {
   display: flex;
   align-items: center;
