@@ -1,22 +1,30 @@
+importScripts("chess.js");
 importScripts("engine.js");
 
 let activeToken = null;
 let cancelled = false;
+let game = null;
 
 function minimax(depth, alpha, beta, maximizing, deadline) {
   if (cancelled) return { score: maximizing ? -Infinity : Infinity, timeout: true };
   if (performance.now() > deadline) return { score: maximizing ? -Infinity : Infinity, timeout: true };
 
-  const result = game.result();
-  if (result) {
-    if (result === "1/2-1/2") return { score: 0 };
-    return { score: result === "1-0" ? Infinity : -Infinity };
+  if (game.inCheckmate()) {
+    return { score: maximizing ? -Infinity : Infinity };
   }
-  if (depth === 0) return { score: evaluate(game) };
+  if (
+    game.inStalemate() ||
+    game.inDraw() ||
+    game.insufficientMaterial() ||
+    game.inThreefoldRepetition()
+  ) {
+    return { score: 0 };
+  }
+  if (depth === 0) return { score: evaluateBoard(game) };
 
-  const moves = game.generateMoves();
+  const moves = game.moves({ verbose: true });
   if (moves.length === 0) {
-    return { score: evaluate(game) };
+    return { score: evaluateBoard(game) };
   }
 
   let bestLine = [];
@@ -25,7 +33,7 @@ function minimax(depth, alpha, beta, maximizing, deadline) {
     let timedOut = false;
     for (const move of moves) {
       if (cancelled) return { score: best, line: bestLine, timeout: true };
-      game.makeMove(move);
+      game.move({ from: move.from, to: move.to, promotion: move.promotion || "q" });
       const { score, timeout, line } = minimax(depth - 1, alpha, beta, false, deadline);
       game.undo();
       if (timeout) timedOut = true;
@@ -46,7 +54,7 @@ function minimax(depth, alpha, beta, maximizing, deadline) {
     let timedOut = false;
     for (const move of moves) {
       if (cancelled) return { score: best, line: bestLine, timeout: true };
-      game.makeMove(move);
+      game.move({ from: move.from, to: move.to, promotion: move.promotion || "q" });
       const { score, timeout, line } = minimax(depth - 1, alpha, beta, true, deadline);
       game.undo();
       if (timeout) timedOut = true;
@@ -66,13 +74,13 @@ function minimax(depth, alpha, beta, maximizing, deadline) {
 }
 
 function rootSearch(depth, maximizing, deadline) {
-  const moves = game.generateMoves();
+  const moves = game.moves({ verbose: true });
   let alpha = -Infinity;
   let beta = Infinity;
   const results = [];
   for (const move of moves) {
     if (cancelled) return { moves: results, timeout: true };
-    game.makeMove(move);
+    game.move({ from: move.from, to: move.to, promotion: move.promotion || "q" });
     const { score, timeout, line } = minimax(depth - 1, alpha, beta, !maximizing, deadline);
     game.undo();
     if (timeout) return { moves: results, timeout: true };
@@ -89,10 +97,8 @@ function rootSearch(depth, maximizing, deadline) {
   return { moves: results, timeout: false };
 }
 
-let game = null;
-
 self.onmessage = (event) => {
-  const { type, token, state, timeMs, color } = event.data;
+  const { type, token, fen, timeMs, color } = event.data;
   if (type === "cancel") {
     if (token === activeToken) cancelled = true;
     return;
@@ -101,7 +107,7 @@ self.onmessage = (event) => {
   if (type === "search") {
     activeToken = token;
     cancelled = false;
-    game = new GameState(state);
+    game = new Chess(fen);
     const maximizing = color === "w";
     const deadline = performance.now() + timeMs;
     let depth = 1;
