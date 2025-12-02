@@ -69,12 +69,12 @@ function squareFromCoords(r, c) {
 }
 
 function getResult() {
-  if (game.inCheckmate()) return game.turn() === "w" ? "0-1" : "1-0";
+  if (game.isCheckmate()) return game.turn() === "w" ? "0-1" : "1-0";
   if (
-    game.inStalemate() ||
-    game.inDraw() ||
-    game.insufficientMaterial() ||
-    game.inThreefoldRepetition()
+    game.isStalemate() ||
+    game.isDraw() ||
+    game.isInsufficientMaterial() ||
+    game.isThreefoldRepetition()
   ) {
     return "1/2-1/2";
   }
