@@ -10,7 +10,7 @@ const analysisStatusEl = document.getElementById("analysis-status");
 
 const fileLabels = ["a", "b", "c", "d", "e", "f", "g", "h"];
 
-let game = new GameState();
+let game = new Chess();
 let selected = null;
 let legalMoves = [];
 let searching = false;
@@ -43,17 +43,6 @@ function handleSearchUpdate(lines, depth) {
   analysisStatusEl.textContent = `Depth ${depth}`;
 }
 
-function serializeState(state) {
-  return {
-    board: state.cloneBoard(state.board),
-    turn: state.turn,
-    castling: JSON.parse(JSON.stringify(state.castling)),
-    enPassant: state.enPassant ? { ...state.enPassant } : null,
-    halfmove: state.halfmove,
-    fullmove: state.fullmove,
-  };
-}
-
 function createBoard() {
   boardEl.innerHTML = "";
   for (let r = 0; r < 8; r++) {
@@ -70,73 +59,96 @@ function createBoard() {
   }
 }
 
+function squareFromCoords(r, c) {
+  return `${fileLabels[c]}${8 - r}`;
+}
+
+function getResult() {
+  if (game.inCheckmate()) return game.turn() === "w" ? "0-1" : "1-0";
+  if (
+    game.inStalemate() ||
+    game.inDraw() ||
+    game.insufficientMaterial() ||
+    game.inThreefoldRepetition()
+  ) {
+    return "1/2-1/2";
+  }
+  return null;
+}
+
 function renderBoard() {
+  const boardState = game.board();
   for (const square of boardEl.children) {
     square.textContent = "";
     square.classList.remove("selected", "legal", "capture");
     const r = Number(square.dataset.r);
     const c = Number(square.dataset.c);
-    const piece = game.board[r][c];
+    const piece = boardState[r][c];
     if (piece) {
       square.textContent = PIECES[piece.color][piece.type];
     }
   }
-  statusEl.textContent = `Turn: ${game.turn === "w" ? "White" : "Black"}`;
-  const result = game.result();
+  statusEl.textContent = `Turn: ${game.turn() === "w" ? "White" : "Black"}`;
+  const result = getResult();
   if (result) {
     statusEl.textContent = result === "1/2-1/2" ? "Draw" : `${result === "1-0" ? "White" : "Black"} wins`;
   }
 }
 
 function onSquareClick(r, c) {
-  if (game.turn !== colorSelect.value) return;
+  if (game.turn() !== colorSelect.value) return;
   if (searching) stopSearch();
-  const piece = game.board[r][c];
-  if (selected && selected.r === r && selected.c === c) {
+  const square = squareFromCoords(r, c);
+  if (selected === square) {
     selected = null;
     legalMoves = [];
     renderBoard();
     return;
   }
   if (selected) {
-    const move = legalMoves.find((m) => m.to.r === r && m.to.c === c);
+    const move = legalMoves.find((m) => m.to === square);
     if (move) {
-      game.makeMove(move);
-      selected = null;
-      legalMoves = [];
-      renderBoard();
-      previewEl.textContent = "Calculating best reply...";
-      stopSearch();
-      requestAnimationFrame(() => maybeAutoPlay());
+      applyMove(move);
       return;
     }
   }
-  if (piece && piece.color === game.turn) {
-    selected = { r, c };
-    legalMoves = game.generateMoves().filter((m) => m.from.r === r && m.from.c === c);
+  const piece = game.get(square);
+  if (piece && piece.color === game.turn()) {
+    selected = square;
+    legalMoves = game.moves({ square, verbose: true });
     highlightMoves();
   }
+}
+
+function applyMove(move) {
+  const madeMove = game.move({ from: move.from, to: move.to, promotion: move.promotion || "q" });
+  if (!madeMove) return;
+  selected = null;
+  legalMoves = [];
+  renderBoard();
+  previewEl.textContent = "Calculating best reply...";
+  stopSearch();
+  requestAnimationFrame(() => maybeAutoPlay());
 }
 
 function highlightMoves() {
   renderBoard();
   if (!selected) return;
-  for (const square of boardEl.children) {
-    const r = Number(square.dataset.r);
-    const c = Number(square.dataset.c);
-    if (selected.r === r && selected.c === c) square.classList.add("selected");
-    const move = legalMoves.find((m) => m.to.r === r && m.to.c === c);
+  for (const squareEl of boardEl.children) {
+    const r = Number(squareEl.dataset.r);
+    const c = Number(squareEl.dataset.c);
+    const square = squareFromCoords(r, c);
+    if (selected === square) squareEl.classList.add("selected");
+    const move = legalMoves.find((m) => m.to === square);
     if (move) {
-      square.classList.add("legal");
-      if (move.captured) square.classList.add("capture");
+      squareEl.classList.add("legal");
+      if (move.captured) squareEl.classList.add("capture");
     }
   }
 }
 
 function moveToAlgebra(move) {
-  const from = `${fileLabels[move.from.c]}${8 - move.from.r}`;
-  const to = `${fileLabels[move.to.c]}${8 - move.to.r}`;
-  return `${from}-${to}${move.promotion ? "=Q" : ""}`;
+  return `${move.from}-${move.to}${move.promotion ? "=Q" : ""}`;
 }
 
 function stopSearch() {
@@ -178,7 +190,7 @@ function finalizeSearch() {
   analysisStatusEl.textContent = pendingAutoMove ? "Move ready" : "Analysis ready";
   if (pendingAutoMove) {
     if (!lastBestMove) {
-      const fallback = game.generateMoves()[0];
+      const fallback = game.moves({ verbose: true })[0];
       if (fallback) {
         lastBestMove = fallback;
         lastBestLines = [{ line: [fallback], displayScore: 0 }];
@@ -187,7 +199,7 @@ function finalizeSearch() {
       }
     }
     if (lastBestMove) {
-      game.makeMove(lastBestMove);
+      game.move({ from: lastBestMove.from, to: lastBestMove.to, promotion: lastBestMove.promotion || "q" });
       selected = null;
       legalMoves = [];
       renderBoard();
@@ -214,14 +226,14 @@ function think({ autoMove = false } = {}) {
   engineWorker.postMessage({
     type: "search",
     token,
-    state: serializeState(game),
+    fen: game.fen(),
     timeMs,
-    color: game.turn,
+    color: game.turn(),
   });
 }
 
 function maybeAutoPlay() {
-  const result = game.result();
+  const result = getResult();
   if (result) {
     statusEl.textContent = result === "1/2-1/2" ? "Draw" : `${result === "1-0" ? "White" : "Black"} wins`;
     stopSearch();
@@ -231,7 +243,7 @@ function maybeAutoPlay() {
     if (!searching) requestAnimationFrame(() => think({ autoMove: false }));
     return;
   }
-  if (game.turn !== colorSelect.value) {
+  if (game.turn() !== colorSelect.value) {
     if (!searching) requestAnimationFrame(() => think({ autoMove: true }));
   } else {
     stopSearch();
@@ -267,12 +279,12 @@ permaAnalysisToggle.addEventListener("change", () => {
 });
 
 moveNowBtn.addEventListener("click", () => {
-  if (game.turn === colorSelect.value) return;
+  if (game.turn() === colorSelect.value) return;
   if (searching) {
     stopSearch();
   }
   if (lastBestMove) {
-    game.makeMove(lastBestMove);
+    game.move({ from: lastBestMove.from, to: lastBestMove.to, promotion: lastBestMove.promotion || "q" });
     selected = null;
     legalMoves = [];
     renderBoard();
