@@ -30,6 +30,17 @@
           <input type="checkbox" id="perma-analysis" />
           Permanent analysis
         </label>
+        <label class="depth-control">
+          Depth
+          <input
+            type="number"
+            id="max-depth"
+            name="max-depth"
+            min="1"
+            max="8"
+            value="5"
+          />
+        </label>
         <div class="analysis-actions">
           <button id="move-now" type="button">Move Now</button>
           <div id="analysis-status" class="analysis-status">Idle</div>

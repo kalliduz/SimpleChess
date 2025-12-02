@@ -3,6 +3,7 @@ const statusEl = document.getElementById("status");
 const previewEl = document.getElementById("preview");
 const newGameBtn = document.getElementById("new-game");
 const permaAnalysisToggle = document.getElementById("perma-analysis");
+const maxDepthInput = document.getElementById("max-depth");
 const moveNowBtn = document.getElementById("move-now");
 const analysisStatusEl = document.getElementById("analysis-status");
 
@@ -23,7 +24,7 @@ let lastDepth = 0;
 let pendingAutoMove = false;
 let activeSearchToken = null;
 let searchTokenCounter = 0;
-const MAX_SEARCH_DEPTH = 5;
+const DEFAULT_MAX_SEARCH_DEPTH = 5;
 
 const engineWorker = new Worker("worker.js");
 
@@ -178,6 +179,16 @@ function formatPV(line) {
   return line.map(moveToAlgebra).join(" → ");
 }
 
+function getMaxDepth() {
+  if (!maxDepthInput) return DEFAULT_MAX_SEARCH_DEPTH;
+  const parsed = Number(maxDepthInput.value);
+  if (!Number.isInteger(parsed) || parsed < 1) {
+    maxDepthInput.value = DEFAULT_MAX_SEARCH_DEPTH;
+    return DEFAULT_MAX_SEARCH_DEPTH;
+  }
+  return parsed;
+}
+
 function describeScore(score) {
   if (score === Infinity) return "Mate";
   if (score === -Infinity) return "-Mate";
@@ -275,7 +286,7 @@ function think({ autoMove = false } = {}) {
     type: "search",
     token,
     fen: game.fen(),
-    maxDepth: MAX_SEARCH_DEPTH,
+    maxDepth: getMaxDepth(),
     color: game.turn(),
   });
 }
@@ -299,6 +310,15 @@ newGameBtn.addEventListener("click", () => {
   renderBoard();
   maybeAnalyze();
 });
+
+if (maxDepthInput) {
+  maxDepthInput.value = DEFAULT_MAX_SEARCH_DEPTH;
+  maxDepthInput.addEventListener("change", () => {
+    stopSearch();
+    resetAnalysisState();
+    maybeAnalyze();
+  });
+}
 
 permaAnalysisToggle.addEventListener("change", () => {
   if (!permaAnalysisToggle.checked) {
