@@ -449,11 +449,18 @@ const previewEl = document.getElementById("preview");
 const thinkInput = document.getElementById("think-time");
 const colorSelect = document.getElementById("player-color");
 const newGameBtn = document.getElementById("new-game");
+const permaAnalysisToggle = document.getElementById("perma-analysis");
+const moveNowBtn = document.getElementById("move-now");
+const analysisStatusEl = document.getElementById("analysis-status");
 
 let game = new GameState();
 let selected = null;
 let legalMoves = [];
 let searching = false;
+let searchController = null;
+let lastBestMove = null;
+let lastBestLine = [];
+let lastDepth = 0;
 
 const fileLabels = ["a", "b", "c", "d", "e", "f", "g", "h"];
 
@@ -492,7 +499,8 @@ function renderBoard() {
 }
 
 function onSquareClick(r, c) {
-  if (searching || game.turn !== colorSelect.value) return;
+  if (game.turn !== colorSelect.value) return;
+  if (searching) stopSearch();
   const piece = game.board[r][c];
   if (selected && selected.r === r && selected.c === c) {
     selected = null;
@@ -508,7 +516,8 @@ function onSquareClick(r, c) {
       legalMoves = [];
       renderBoard();
       previewEl.textContent = "Calculating best reply...";
-      requestAnimationFrame(() => aiMove());
+      stopSearch();
+      requestAnimationFrame(() => maybeAutoPlay());
       return;
     }
   }
@@ -547,7 +556,8 @@ function evaluate() {
   return score;
 }
 
-function search(depth, alpha, beta, maximizing, deadline, pv) {
+function search(depth, alpha, beta, maximizing, deadline, controller) {
+  if (controller?.cancelled) return { score: maximizing ? -Infinity : Infinity, timeout: true };
   if (performance.now() > deadline) return { score: maximizing ? -Infinity : Infinity, timeout: true };
   const result = game.result();
   if (result) {
@@ -566,8 +576,9 @@ function search(depth, alpha, beta, maximizing, deadline, pv) {
     let best = -Infinity;
     let timedOut = false;
     for (const move of moves) {
+      if (controller?.cancelled) return { score: best, line: bestLine, timeout: true };
       game.makeMove(move);
-      const { score, timeout, line } = search(depth - 1, alpha, beta, false, deadline, pv);
+      const { score, timeout, line } = search(depth - 1, alpha, beta, false, deadline, controller);
       game.undo();
       if (timeout) timedOut = true;
       if (score > best) {
@@ -576,15 +587,19 @@ function search(depth, alpha, beta, maximizing, deadline, pv) {
       }
       alpha = Math.max(alpha, best);
       if (beta <= alpha) break;
-      if (performance.now() > deadline) break;
+      if (performance.now() > deadline) {
+        timedOut = true;
+        break;
+      }
     }
     return { score: best, line: bestLine, timeout: timedOut };
   } else {
     let best = Infinity;
     let timedOut = false;
     for (const move of moves) {
+      if (controller?.cancelled) return { score: best, line: bestLine, timeout: true };
       game.makeMove(move);
-      const { score, timeout, line } = search(depth - 1, alpha, beta, true, deadline, pv);
+      const { score, timeout, line } = search(depth - 1, alpha, beta, true, deadline, controller);
       game.undo();
       if (timeout) timedOut = true;
       if (score < best) {
@@ -593,26 +608,13 @@ function search(depth, alpha, beta, maximizing, deadline, pv) {
       }
       beta = Math.min(beta, best);
       if (beta <= alpha) break;
-      if (performance.now() > deadline) break;
+      if (performance.now() > deadline) {
+        timedOut = true;
+        break;
+      }
     }
     return { score: best, line: bestLine, timeout: timedOut };
   }
-}
-
-function findBestMove(timeMs) {
-  const deadline = performance.now() + timeMs;
-  let depth = 1;
-  let best = null;
-  let bestLine = [];
-  while (performance.now() < deadline) {
-    const result = search(depth, -Infinity, Infinity, game.turn === "w", deadline);
-    if (!result.timeout && result.line && result.line.length) {
-      best = result.line[0];
-      bestLine = result.line;
-    }
-    depth += 1;
-  }
-  return { best, bestLine, depth: depth - 1 };
 }
 
 function moveToAlgebra(move) {
@@ -621,49 +623,138 @@ function moveToAlgebra(move) {
   return `${from}-${to}${move.promotion ? "=Q" : ""}`;
 }
 
-async function aiMove() {
-  if (searching) return;
-  searching = true;
-  statusEl.textContent = "AI thinking...";
-  const timeMs = Math.max(100, Number(thinkInput.value) || 1500);
-  const { best, bestLine, depth } = findBestMove(timeMs);
-  if (best) {
-    previewEl.textContent = `Depth ${depth} principal variation:\n` + bestLine.map(moveToAlgebra).join(" → ");
-    game.makeMove(best);
-  } else {
-    previewEl.textContent = "AI could not find a move (timeout).";
+function stopSearch() {
+  if (searchController) {
+    searchController.cancelled = true;
   }
+  searchController = null;
   searching = false;
-  selected = null;
-  legalMoves = [];
-  renderBoard();
-  maybeAutoPlay();
+  analysisStatusEl.textContent = "Idle";
+}
+
+function formatPV(line) {
+  if (!line || !line.length) return "No principal variation available yet.";
+  return line.map(moveToAlgebra).join(" → ");
+}
+
+function updatePreview(line, depth) {
+  const header = depth ? `Depth ${depth} principal variation:` : "Principal variation:";
+  previewEl.textContent = `${header}\n${formatPV(line)}`;
+}
+
+async function think({ autoMove = false } = {}) {
+  stopSearch();
+  const controller = { cancelled: false };
+  searchController = controller;
+  searching = true;
+  lastBestMove = null;
+  lastBestLine = [];
+  lastDepth = 0;
+
+  const timeMs = Math.max(100, Number(thinkInput.value) || 1500);
+  const deadline = performance.now() + timeMs;
+  let depth = 1;
+  analysisStatusEl.textContent = autoMove ? "Finding move..." : "Analyzing...";
+  previewEl.textContent = "Searching...";
+
+  while (!controller.cancelled && performance.now() < deadline) {
+    const result = search(depth, -Infinity, Infinity, game.turn === "w", deadline, controller);
+    if (controller.cancelled) break;
+    if (!result.timeout && result.line && result.line.length) {
+      lastBestMove = result.line[0];
+      lastBestLine = result.line;
+      lastDepth = depth;
+      updatePreview(lastBestLine, lastDepth);
+      analysisStatusEl.textContent = `Depth ${depth}`;
+    }
+    depth += 1;
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+  }
+
+  searching = false;
+  searchController = null;
+  analysisStatusEl.textContent = autoMove ? "Move ready" : "Analysis ready";
+
+  if (controller.cancelled) return;
+
+  if (autoMove) {
+    if (!lastBestMove) {
+      const fallback = game.generateMoves()[0];
+      if (fallback) {
+        lastBestMove = fallback;
+        lastBestLine = [fallback];
+        lastDepth = 1;
+        updatePreview(lastBestLine, lastDepth);
+      }
+    }
+    if (lastBestMove) {
+      game.makeMove(lastBestMove);
+      selected = null;
+      legalMoves = [];
+      renderBoard();
+      requestAnimationFrame(() => maybeAutoPlay());
+    }
+  }
 }
 
 function maybeAutoPlay() {
   const result = game.result();
   if (result) {
     statusEl.textContent = result === "1/2-1/2" ? "Draw" : `${result === "1-0" ? "White" : "Black"} wins`;
+    stopSearch();
     return;
   }
   if (game.turn !== colorSelect.value) {
-    requestAnimationFrame(() => aiMove());
+    if (!searching) requestAnimationFrame(() => think({ autoMove: true }));
+  } else if (permaAnalysisToggle.checked) {
+    if (!searching) requestAnimationFrame(() => think({ autoMove: false }));
+  } else {
+    stopSearch();
   }
 }
 
 newGameBtn.addEventListener("click", () => {
+  stopSearch();
   game.reset();
   selected = null;
   legalMoves = [];
   previewEl.textContent = "Run the AI to see its preferred line.";
+  lastBestMove = null;
+  lastBestLine = [];
   renderBoard();
   maybeAutoPlay();
 });
 
 colorSelect.addEventListener("change", () => {
+  stopSearch();
   game.reset();
+  lastBestMove = null;
+  lastBestLine = [];
   renderBoard();
   maybeAutoPlay();
+});
+
+permaAnalysisToggle.addEventListener("change", () => {
+  if (!permaAnalysisToggle.checked) {
+    stopSearch();
+  }
+  maybeAutoPlay();
+});
+
+moveNowBtn.addEventListener("click", () => {
+  if (game.turn === colorSelect.value) return;
+  if (searching) {
+    stopSearch();
+  }
+  if (lastBestMove) {
+    game.makeMove(lastBestMove);
+    selected = null;
+    legalMoves = [];
+    renderBoard();
+    requestAnimationFrame(() => maybeAutoPlay());
+  } else {
+    think({ autoMove: true });
+  }
 });
 
 createBoard();
