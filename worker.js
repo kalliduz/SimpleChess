@@ -94,7 +94,7 @@ function rootSearch(depth, maximizing) {
 }
 
 self.onmessage = (event) => {
-  const { type, token, fen, maxDepth, color } = event.data;
+  const { type, token, fen, color } = event.data;
   if (type === "cancel") {
     if (token === activeToken) cancelled = true;
     return;
@@ -107,7 +107,7 @@ self.onmessage = (event) => {
     const maximizing = color === "w";
     let depth = 1;
     let best = [];
-    while (!cancelled && depth <= maxDepth) {
+    while (!cancelled) {
       const { moves, timeout } = rootSearch(depth, maximizing);
       if (cancelled) break;
       if (!timeout && moves.length) {

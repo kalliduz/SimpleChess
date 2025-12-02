@@ -23,8 +23,6 @@ let lastDepth = 0;
 let pendingAutoMove = false;
 let activeSearchToken = null;
 let searchTokenCounter = 0;
-const MAX_SEARCH_DEPTH = 5;
-
 const engineWorker = new Worker("worker.js");
 
 engineWorker.onmessage = ({ data }) => {
@@ -44,6 +42,10 @@ function handleSearchUpdate(lines, depth) {
   lastDepth = depth;
   updatePreview(lastBestLines, depth);
   analysisStatusEl.textContent = lastBestLines.length ? `Depth ${depth}` : "No principal variation available yet.";
+  if (pendingAutoMove && lastBestMove) {
+    stopSearch();
+    applyEngineMove(lastBestMove);
+  }
 }
 
 function createBoard() {
@@ -275,7 +277,6 @@ function think({ autoMove = false } = {}) {
     type: "search",
     token,
     fen: game.fen(),
-    maxDepth: MAX_SEARCH_DEPTH,
     color: game.turn(),
   });
 }
