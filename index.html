@@ -10,32 +10,115 @@
 <body>
   <header>
     <h1>Simple Chess</h1>
-    <p>Use the built-in search to explore the best line and optionally let it play the current side.</p>
+    <p>Use the built-in search to explore the best line, analyze positions, and fine-tune the engine settings.</p>
   </header>
 
   <main>
     <section class="board-panel">
       <div class="controls">
         <button id="new-game">New Game</button>
+        <label>
+          Difficulty
+          <select id="difficulty">
+            <option value="1">Beginner (Depth 1)</option>
+            <option value="2">Casual (Depth 2)</option>
+            <option value="3" selected>Club (Depth 3)</option>
+            <option value="4">Advanced (Depth 4)</option>
+            <option value="5">Expert (Depth 5)</option>
+            <option value="8">Master (Depth 8)</option>
+          </select>
+        </label>
+        <label>
+          Move time
+          <select id="time-limit">
+            <option value="0">No limit</option>
+            <option value="500">0.5s</option>
+            <option value="1000">1s</option>
+            <option value="2000">2s</option>
+            <option value="5000" selected>5s</option>
+            <option value="10000">10s</option>
+          </select>
+        </label>
       </div>
-      <div id="board" aria-label="Chess board" role="grid"></div>
+      <div class="board-shell">
+        <div class="evaluation-bar" aria-hidden="true">
+          <div class="evaluation-fill" id="evaluation-fill"></div>
+          <div class="evaluation-label" id="evaluation-label">0.00</div>
+        </div>
+        <div id="board" aria-label="Chess board" role="grid"></div>
+      </div>
       <div class="status" id="status"></div>
+      <div class="move-log">
+        <h3>Move annotations</h3>
+        <ol id="move-list" class="move-list"></ol>
+      </div>
     </section>
 
     <section class="analysis-panel">
-      <h2>Best move preview</h2>
-      <p>The AI continuously analyzes the current position. The preview shows the principal variation from the latest search.</p>
+      <h2>Analysis</h2>
+      <p>The engine can run in analysis mode, report detailed statistics, and provide the current principal variation.</p>
       <div class="analysis-controls">
         <label class="checkbox">
           <input type="checkbox" id="perma-analysis" />
-          Permanent analysis
+          Analysis mode (infinite)
         </label>
         <div class="analysis-actions">
           <button id="move-now" type="button">Move Now</button>
+          <button id="toggle-pv" type="button">Toggle PV details</button>
           <div id="analysis-status" class="analysis-status">Idle</div>
         </div>
       </div>
+      <div class="stats-grid">
+        <div>
+          <span class="stat-label">Depth</span>
+          <span class="stat-value" id="stat-depth">0</span>
+        </div>
+        <div>
+          <span class="stat-label">Nodes</span>
+          <span class="stat-value" id="stat-nodes">0</span>
+        </div>
+        <div>
+          <span class="stat-label">NPS</span>
+          <span class="stat-value" id="stat-nps">0</span>
+        </div>
+        <div>
+          <span class="stat-label">Eval</span>
+          <span class="stat-value" id="stat-eval">0.00</span>
+        </div>
+      </div>
       <div class="preview" id="preview">Run the AI to see its preferred line.</div>
+      <div class="developer-panel">
+        <h3>Developer console</h3>
+        <div class="developer-grid">
+          <div>TT hit rate: <span id="stat-tt">0%</span></div>
+          <div>Ordering cuts: <span id="stat-ordering">0</span></div>
+          <div>Null prunes: <span id="stat-null">0</span></div>
+          <div>LMR reductions: <span id="stat-lmr">0</span></div>
+          <div>LMP cuts: <span id="stat-lmp">0</span></div>
+          <div>SEE prunes: <span id="stat-see">0</span></div>
+        </div>
+      </div>
+
+      <div class="utility-panel">
+        <h3>Position tools</h3>
+        <label>
+          FEN
+          <input id="fen-input" type="text" placeholder="Paste or export FEN" />
+        </label>
+        <div class="utility-actions">
+          <button id="load-fen" type="button">Load FEN</button>
+          <button id="copy-fen" type="button">Copy current FEN</button>
+        </div>
+        <div class="perft-panel">
+          <h4>Perft</h4>
+          <label>
+            Depth
+            <input id="perft-depth" type="number" min="1" max="5" value="3" />
+          </label>
+          <button id="run-perft" type="button">Run perft</button>
+          <div id="perft-output" class="perft-output">Idle</div>
+        </div>
+      </div>
     </section>
   </main>
 
