@@ -315,6 +315,22 @@ permaAnalysisToggle.addEventListener("change", () => {
 });
 
 moveNowBtn.addEventListener("click", () => {
+  const usePermaAnalysis = permaAnalysisToggle.checked;
+  if (usePermaAnalysis) {
+    if (lastBestMove) {
+      if (searching) stopSearch();
+      applyEngineMove(lastBestMove);
+      return;
+    }
+    if (searching) {
+      pendingAutoMove = true;
+      analysisStatusEl.textContent = "Waiting for current best line...";
+      return;
+    }
+    think({ autoMove: true });
+    return;
+  }
+
   if (lastBestMove) {
     if (searching) stopSearch();
     applyEngineMove(lastBestMove);
