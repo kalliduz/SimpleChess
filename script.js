@@ -5,6 +5,28 @@ const newGameBtn = document.getElementById("new-game");
 const permaAnalysisToggle = document.getElementById("perma-analysis");
 const moveNowBtn = document.getElementById("move-now");
 const analysisStatusEl = document.getElementById("analysis-status");
+const difficultySelect = document.getElementById("difficulty");
+const timeLimitSelect = document.getElementById("time-limit");
+const togglePvBtn = document.getElementById("toggle-pv");
+const statDepthEl = document.getElementById("stat-depth");
+const statNodesEl = document.getElementById("stat-nodes");
+const statNpsEl = document.getElementById("stat-nps");
+const statEvalEl = document.getElementById("stat-eval");
+const statTtEl = document.getElementById("stat-tt");
+const statOrderingEl = document.getElementById("stat-ordering");
+const statNullEl = document.getElementById("stat-null");
+const statLmrEl = document.getElementById("stat-lmr");
+const statLmpEl = document.getElementById("stat-lmp");
+const statSeeEl = document.getElementById("stat-see");
+const evalFillEl = document.getElementById("evaluation-fill");
+const evalLabelEl = document.getElementById("evaluation-label");
+const fenInput = document.getElementById("fen-input");
+const loadFenBtn = document.getElementById("load-fen");
+const copyFenBtn = document.getElementById("copy-fen");
+const perftDepthInput = document.getElementById("perft-depth");
+const runPerftBtn = document.getElementById("run-perft");
+const perftOutputEl = document.getElementById("perft-output");
+const moveListEl = document.getElementById("move-list");
 
 const ChessEngine = typeof window.Chess === "function" ? window.Chess : window.Chess?.Chess;
 if (!ChessEngine) {
@@ -24,27 +46,31 @@ let pendingAutoMove = false;
 let activeSearchToken = null;
 let searchTokenCounter = 0;
 let engineWorker = createEngineWorker();
+let pvExpanded = true;
+let lastEvalScore = 0;
 
 function createEngineWorker() {
   const worker = new Worker("worker.js");
   worker.onmessage = ({ data }) => {
-    const { type, token, lines, depth } = data;
-    if (token !== activeSearchToken) return;
+    const { type, token, lines, depth, stats, nodes } = data;
+    if (token && token !== activeSearchToken) return;
     if (type === "update") {
-      handleSearchUpdate(lines, depth);
+      handleSearchUpdate(lines, depth, stats);
     } else if (type === "done") {
-      handleSearchUpdate(lines, depth);
+      handleSearchUpdate(lines, depth, stats);
       finalizeSearch();
+    } else if (type === "perft") {
+      perftOutputEl.textContent = `Perft depth ${depth}: ${nodes.toLocaleString()} nodes`;
     }
   };
   return worker;
 }
 
-function handleSearchUpdate(lines, depth) {
+function handleSearchUpdate(lines, depth, stats) {
   lastBestLines = lines || [];
   lastBestMove = lastBestLines[0]?.line?.[0] || null;
   lastDepth = depth;
-  updatePreview(lastBestLines, depth);
+  updatePreview(lastBestLines, depth, stats);
   analysisStatusEl.textContent = lastBestLines.length ? `Depth ${depth}` : "No principal variation available yet.";
   if (pendingAutoMove && lastBestMove) {
     stopSearch();
@@ -129,12 +155,28 @@ function onSquareClick(r, c) {
 }
 
 function applyMove(move) {
+  const evalBefore = evaluateBoard(game);
   const madeMove = game.move({ from: move.from, to: move.to, promotion: move.promotion || "q" });
   if (!madeMove) return;
+  annotateMove(madeMove, evalBefore);
   selected = null;
   legalMoves = [];
   renderBoard();
   stopSearch();
+  resetAnalysisState();
+  requestAnimationFrame(() => maybeAnalyze());
+}
+
+function applyEngineMove(move) {
+  const evalBefore = evaluateBoard(game);
+  const madeMove = game.move({ from: move.from, to: move.to, promotion: move.promotion || "q" });
+  if (madeMove) {
+    annotateMove(madeMove, evalBefore, true);
+  }
+  selected = null;
+  legalMoves = [];
+  renderBoard();
+  pendingAutoMove = false;
   resetAnalysisState();
   requestAnimationFrame(() => maybeAnalyze());
 }
@@ -175,6 +217,11 @@ function resetAnalysisState() {
   lastBestMove = null;
   lastBestLines = [];
   lastDepth = 0;
+  statDepthEl.textContent = "0";
+  statNodesEl.textContent = "0";
+  statNpsEl.textContent = "0";
+  statEvalEl.textContent = "0.00";
+  updateEvaluationBar(0);
   analysisStatusEl.textContent = permaAnalysisToggle.checked ? "Analyzing..." : "Idle";
   previewEl.textContent = permaAnalysisToggle.checked
     ? "Analyzing..."
@@ -192,7 +239,27 @@ function describeScore(score) {
   return (score / 100).toFixed(2);
 }
 
-function updatePreview(lines, depth) {
+function updateStats(stats, depth) {
+  if (!stats) return;
+  const totalNodes = stats.nodes + stats.qnodes;
+  statDepthEl.textContent = depth ?? "0";
+  statNodesEl.textContent = totalNodes.toLocaleString();
+  statNpsEl.textContent = stats.nps?.toLocaleString() || "0";
+  const evalScore = stats.eval ?? 0;
+  statEvalEl.textContent = (evalScore / 100).toFixed(2);
+  lastEvalScore = evalScore;
+  updateEvaluationBar(evalScore);
+  const hitRate = stats.ttHits ? Math.round((stats.ttHits / Math.max(1, stats.nodes)) * 100) : 0;
+  statTtEl.textContent = `${hitRate}%`;
+  statOrderingEl.textContent = stats.orderingCuts ?? 0;
+  statNullEl.textContent = stats.nullPrunes ?? 0;
+  statLmrEl.textContent = stats.lmrReductions ?? 0;
+  statLmpEl.textContent = stats.lmpCuts ?? 0;
+  statSeeEl.textContent = stats.seePrunes ?? 0;
+}
+
+function updatePreview(lines, depth, stats) {
+  updateStats(stats, depth);
   if (!lines || !lines.length) {
     previewEl.textContent = "No principal variation available yet.";
     return;
@@ -215,6 +282,7 @@ function updatePreview(lines, depth) {
   list.className = "pv-list";
 
   lines.forEach((entry, idx) => {
+    if (!pvExpanded && idx > 0) return;
     const item = document.createElement("li");
     item.className = "pv-line";
     const header = document.createElement("div");
@@ -284,17 +352,42 @@ function think({ autoMove = false } = {}) {
     token,
     fen: game.fen(),
     color: game.turn(),
+    maxDepth: Number(difficultySelect.value) || 3,
+    timeLimitMs: Number(timeLimitSelect.value) || 0,
   });
 }
 
-function applyEngineMove(move) {
-  game.move({ from: move.from, to: move.to, promotion: move.promotion || "q" });
-  selected = null;
-  legalMoves = [];
-  renderBoard();
-  pendingAutoMove = false;
-  resetAnalysisState();
-  requestAnimationFrame(() => maybeAnalyze());
+function updateEvaluationBar(score) {
+  const clamped = Math.max(-800, Math.min(800, score));
+  const percent = 50 + (clamped / 800) * 50;
+  evalFillEl.style.height = `${percent}%`;
+  evalLabelEl.textContent = (score / 100).toFixed(2);
+}
+
+function annotateMove(move, evalBefore, isEngine = false) {
+  const evalAfter = evaluateBoard(game);
+  const delta = evalAfter - evalBefore;
+  const moverIsWhite = move.color === "w";
+  const perspectiveDelta = moverIsWhite ? delta : -delta;
+  let annotation = "";
+  if (perspectiveDelta < -600) annotation = "??";
+  else if (perspectiveDelta < -300) annotation = "?";
+  else if (perspectiveDelta < -150) annotation = "?!";
+  else if (perspectiveDelta > 150) annotation = "!";
+
+  const moveNumber = Math.ceil(game.history().length / 2);
+  const item = document.createElement("li");
+  item.textContent = `${moveNumber}. ${move.san}${annotation} ${isEngine ? "(engine)" : ""}`.trim();
+  if (annotation.includes("??")) item.classList.add("blunder");
+  if (annotation.includes("?")) item.classList.add("mistake");
+  if (annotation.includes("!")) item.classList.add("brilliant");
+  moveListEl.appendChild(item);
+  moveListEl.scrollTop = moveListEl.scrollHeight;
+  updateEvaluationBar(lastEvalScore);
+}
+
+function resetMoveList() {
+  moveListEl.innerHTML = "";
 }
 
 newGameBtn.addEventListener("click", () => {
@@ -302,6 +395,7 @@ newGameBtn.addEventListener("click", () => {
   game.reset();
   selected = null;
   legalMoves = [];
+  resetMoveList();
   resetAnalysisState();
   renderBoard();
   maybeAnalyze();
@@ -312,6 +406,63 @@ permaAnalysisToggle.addEventListener("change", () => {
     stopSearch();
   }
   maybeAnalyze();
+});
+
+difficultySelect.addEventListener("change", () => {
+  if (permaAnalysisToggle.checked) {
+    think({ autoMove: false });
+  }
+});
+
+timeLimitSelect.addEventListener("change", () => {
+  if (permaAnalysisToggle.checked) {
+    think({ autoMove: false });
+  }
+});
+
+togglePvBtn.addEventListener("click", () => {
+  pvExpanded = !pvExpanded;
+  updatePreview(lastBestLines, lastDepth);
+});
+
+loadFenBtn.addEventListener("click", () => {
+  const fen = fenInput.value.trim();
+  if (!fen) return;
+  const loaded = game.load(fen);
+  if (!loaded) {
+    statusEl.textContent = "Invalid FEN";
+    return;
+  }
+  stopSearch();
+  selected = null;
+  legalMoves = [];
+  resetMoveList();
+  resetAnalysisState();
+  renderBoard();
+  maybeAnalyze();
+});
+
+copyFenBtn.addEventListener("click", async () => {
+  const fen = game.fen();
+  fenInput.value = fen;
+  try {
+    await navigator.clipboard.writeText(fen);
+    statusEl.textContent = "FEN copied to clipboard.";
+  } catch (error) {
+    statusEl.textContent = "FEN copied to the input field.";
+  }
+});
+
+runPerftBtn.addEventListener("click", () => {
+  const depth = Number(perftDepthInput.value) || 1;
+  const token = `perft-${Date.now()}`;
+  perftOutputEl.textContent = "Running perft...";
+  engineWorker.postMessage({
+    type: "perft",
+    token,
+    fen: game.fen(),
+    perftDepth: depth,
+  });
 });
 
 moveNowBtn.addEventListener("click", () => {
