@@ -23,18 +23,22 @@ let lastDepth = 0;
 let pendingAutoMove = false;
 let activeSearchToken = null;
 let searchTokenCounter = 0;
-const engineWorker = new Worker("worker.js");
+let engineWorker = createEngineWorker();
 
-engineWorker.onmessage = ({ data }) => {
-  const { type, token, lines, depth } = data;
-  if (token !== activeSearchToken) return;
-  if (type === "update") {
-    handleSearchUpdate(lines, depth);
-  } else if (type === "done") {
-    handleSearchUpdate(lines, depth);
-    finalizeSearch();
-  }
-};
+function createEngineWorker() {
+  const worker = new Worker("worker.js");
+  worker.onmessage = ({ data }) => {
+    const { type, token, lines, depth } = data;
+    if (token !== activeSearchToken) return;
+    if (type === "update") {
+      handleSearchUpdate(lines, depth);
+    } else if (type === "done") {
+      handleSearchUpdate(lines, depth);
+      finalizeSearch();
+    }
+  };
+  return worker;
+}
 
 function handleSearchUpdate(lines, depth) {
   lastBestLines = lines || [];
@@ -158,6 +162,8 @@ function moveToAlgebra(move) {
 function stopSearch() {
   if (searching && activeSearchToken !== null) {
     engineWorker.postMessage({ type: "cancel", token: activeSearchToken });
+    engineWorker.terminate();
+    engineWorker = createEngineWorker();
   }
   searching = false;
   activeSearchToken = null;
