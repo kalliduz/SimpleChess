@@ -244,9 +244,9 @@ function formatPV(line) {
 }
 
 function describeScore(score) {
-  if (!Number.isFinite(score)) return "N/A";
   if (score === Infinity) return "Mate";
   if (score === -Infinity) return "-Mate";
+  if (!Number.isFinite(score)) return "N/A";
   return (score / 100).toFixed(2);
 }
 
