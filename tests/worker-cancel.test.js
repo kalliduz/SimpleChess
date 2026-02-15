@@ -43,6 +43,25 @@ function waitForNoFurtherUpdates(worker, token, timeout = 500) {
   });
 }
 
+function waitForDepth(worker, token, minDepth, timeout = 5000) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      worker.off('message', handler);
+      reject(new Error('timeout'));
+    }, timeout);
+
+    const handler = (message) => {
+      if (message?.token !== token || message?.type !== 'update') return;
+      if ((message.depth || 0) < minDepth) return;
+      clearTimeout(timer);
+      worker.off('message', handler);
+      resolve(message);
+    };
+
+    worker.on('message', handler);
+  });
+}
+
 test('perma analysis cancels cleanly and restarts from new position', async (t) => {
   const workerPath = path.join(__dirname, '..', 'worker.js');
   const worker = new Worker(workerPath);
@@ -67,4 +86,27 @@ test('perma analysis cancels cleanly and restarts from new position', async (t) 
   assert.ok(update2.depth >= 1, 'expected depth to be tracked');
   const firstMove = update2.lines[0]?.line?.[0];
   assert.strictEqual(firstMove?.color, 'b', 'expected analysis to restart from new FEN with correct side to move');
+});
+
+test('unbounded search can iterate past depth one', async (t) => {
+  const workerPath = path.join(__dirname, '..', 'worker.js');
+  const worker = new Worker(workerPath);
+
+  t.after(() => {
+    worker.terminate();
+  });
+
+  const token = 'token-unbounded';
+  worker.postMessage({
+    type: 'search',
+    token,
+    fen: START_FEN,
+    color: 'w',
+    maxDepth: 0,
+    timeLimitMs: 0,
+  });
+
+  const update = await waitForDepth(worker, token, 2);
+  assert.ok(update.depth >= 2, 'expected iterative deepening to continue past depth 1');
+  worker.postMessage({ type: 'cancel', token });
 });
