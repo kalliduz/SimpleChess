@@ -53,7 +53,8 @@ function createEngineWorker() {
   const worker = new Worker("worker.js");
   worker.onmessage = ({ data }) => {
     const { type, token, lines, depth, stats, nodes } = data;
-    if (token && token !== activeSearchToken) return;
+    const isSearchMessage = type === "update" || type === "done";
+    if (isSearchMessage && token !== activeSearchToken) return;
     if (type === "update") {
       handleSearchUpdate(lines, depth, stats);
     } else if (type === "done") {
