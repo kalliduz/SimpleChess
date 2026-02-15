@@ -149,6 +149,15 @@ function moveKey(move) {
   return `${move.from}${move.to}${move.promotion || ""}`;
 }
 
+function applyMove(chess, move) {
+  const payload = move.promotion ? { from: move.from, to: move.to, promotion: move.promotion } : { from: move.from, to: move.to };
+  try {
+    return chess.move(payload);
+  } catch {
+    return null;
+  }
+}
+
 function getHistoryScore(move) {
   return historyHeuristic.get(moveKey(move)) || 0;
 }
@@ -316,7 +325,7 @@ function quiescence(alpha, beta, maximizing, token, stats, timeBudget) {
     const delta = seeValue(move);
     if (maximizing && standPat + delta + 50 < alpha) continue;
     if (!maximizing && standPat - delta - 50 > beta) continue;
-    game.move({ from: move.from, to: move.to, promotion: move.promotion || "q" });
+    if (!applyMove(game, move)) continue;
     const { score, timeout } = quiescence(alpha, beta, !maximizing, token, stats, timeBudget);
     game.undo();
     if (timeout) return { score, timeout };
@@ -426,7 +435,7 @@ function minimax(depth, alpha, beta, maximizing, token, ply, prevMove, stats, ti
       continue;
     }
 
-    game.move({ from: move.from, to: move.to, promotion: move.promotion || "q" });
+    if (!applyMove(game, move)) continue;
     const givesCheck = inCheck(game);
     const recapture = isRecapture(move, prevMove);
     const passedPawn = isPassedPawnMove(move, game) && gamePhase(game) <= 6;
@@ -540,7 +549,7 @@ function rootSearch(depth, maximizing, token, stats, timeBudget) {
   const results = [];
   for (const move of moves) {
     if (isCancelled(token, timeBudget)) return { moves: results, timeout: true };
-    game.move({ from: move.from, to: move.to, promotion: move.promotion || "q" });
+    if (!applyMove(game, move)) continue;
     const { score, timeout, line } = minimax(depth - 1, alpha, beta, !maximizing, token, 1, move, stats, timeBudget, 0);
     game.undo();
     if (timeout || isCancelled(token, timeBudget)) return { moves: results, timeout: true };

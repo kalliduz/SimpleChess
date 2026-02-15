@@ -157,7 +157,7 @@ function onSquareClick(r, c) {
 
 function applyMove(move) {
   const evalBefore = evaluateBoard(game);
-  const madeMove = game.move({ from: move.from, to: move.to, promotion: move.promotion || "q" });
+  const madeMove = applyChessMove(game, move);
   if (!madeMove) return;
   annotateMove(madeMove, evalBefore);
   selected = null;
@@ -170,7 +170,7 @@ function applyMove(move) {
 
 function applyEngineMove(move) {
   const evalBefore = evaluateBoard(game);
-  const madeMove = game.move({ from: move.from, to: move.to, promotion: move.promotion || "q" });
+  const madeMove = applyChessMove(game, move);
   if (madeMove) {
     annotateMove(madeMove, evalBefore, true);
   }
@@ -200,6 +200,15 @@ function highlightMoves() {
 
 function moveToAlgebra(move) {
   return `${move.from}-${move.to}${move.promotion ? "=Q" : ""}`;
+}
+
+function applyChessMove(chess, move) {
+  const payload = move.promotion ? { from: move.from, to: move.to, promotion: move.promotion } : { from: move.from, to: move.to };
+  try {
+    return chess.move(payload);
+  } catch {
+    return null;
+  }
 }
 
 function stopSearch() {
@@ -237,6 +246,7 @@ function formatPV(line) {
 function describeScore(score) {
   if (score === Infinity) return "Mate";
   if (score === -Infinity) return "-Mate";
+  if (!Number.isFinite(score)) return "N/A";
   return (score / 100).toFixed(2);
 }
 
@@ -246,7 +256,7 @@ function updateStats(stats, depth) {
   statDepthEl.textContent = depth ?? "0";
   statNodesEl.textContent = totalNodes.toLocaleString();
   statNpsEl.textContent = stats.nps?.toLocaleString() || "0";
-  const evalScore = stats.eval ?? 0;
+  const evalScore = Number.isFinite(stats.eval) ? stats.eval : 0;
   statEvalEl.textContent = (evalScore / 100).toFixed(2);
   lastEvalScore = evalScore;
   updateEvaluationBar(evalScore);
@@ -348,13 +358,14 @@ function think({ autoMove = false } = {}) {
   analysisStatusEl.textContent = autoMove ? "Finding move..." : "Analyzing...";
   previewEl.textContent = "Searching...";
 
+  const isPermaAnalysis = permaAnalysisToggle.checked;
   engineWorker.postMessage({
     type: "search",
     token,
     fen: game.fen(),
     color: game.turn(),
-    maxDepth: Number(difficultySelect.value) || 3,
-    timeLimitMs: Number(timeLimitSelect.value) || 0,
+    maxDepth: isPermaAnalysis ? 0 : Number(difficultySelect.value) || 3,
+    timeLimitMs: isPermaAnalysis ? 0 : Number(timeLimitSelect.value) || 0,
   });
 }
 
@@ -410,15 +421,11 @@ permaAnalysisToggle.addEventListener("change", () => {
 });
 
 difficultySelect.addEventListener("change", () => {
-  if (permaAnalysisToggle.checked) {
-    think({ autoMove: false });
-  }
+  if (permaAnalysisToggle.checked) return;
 });
 
 timeLimitSelect.addEventListener("change", () => {
-  if (permaAnalysisToggle.checked) {
-    think({ autoMove: false });
-  }
+  if (permaAnalysisToggle.checked) return;
 });
 
 togglePvBtn.addEventListener("click", () => {
